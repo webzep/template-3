@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+    bouncer:
+        build:
+            context: ./
+            dockerfile: ./docker/bouncer-dev/Dockerfile
+        volumes:
+            - ./services/bouncer:/usr/template-3/services/bouncer
+            - ./packages/common-services:/usr/template-3/packages/common-services
+            - ./packages/common:/usr/template-3/packages/common
+        ports:
+            - 1001:1001
+        env_file:
+            - ./services/bouncer/.env
+        container_name: bouncer
+    api:
+        build:
+            context: ./
+            dockerfile: ./docker/api-dev/Dockerfile
+        volumes:
+            - ./services/api:/usr/template-3/services/api
+            - ./packages/common-services:/usr/template-3/packages/common-services
+            - ./packages/common:/usr/template-3/packages/common
+        ports:
+            - 1002:1002
+        env_file:
+            - ./services/api/.env
+        container_name: api

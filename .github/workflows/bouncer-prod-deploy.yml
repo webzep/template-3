@@ -1,0 +1,62 @@
+name: Deploy API to Cloud Run (Production)
+
+on:
+    push:
+        branches: ['main']
+        paths:
+            - 'docker/bouncer-prod/**'
+            - 'packages/common/**'
+            - 'services/bouncer/**'
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    REGION: australia-southeast1 # TODO: update Cloud Run service region
+
+jobs:
+    deploy:
+        name: Deploy to Cloud Run
+        runs-on: ubuntu-latest
+        env:
+            IMAGE_NAME: gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ vars.GCP_SERVICE_NAME }}
+        steps:
+            - name: Sign in to Google Cloud
+              uses: google-github-actions/setup-gcloud@v0
+              with:
+                  project_id: ${{ secrets.GCP_PROJECT_ID }}
+                  service_account_email: ${{ secrets.GCP_EMAIL }}
+                  service_account_key: ${{ secrets.GCP_CREDENTIALS }}
+
+            - name: Configure Docker
+              run: gcloud auth configure-docker --quiet
+
+            - name: Checkout repository
+              uses: actions/checkout@v2
+
+            - name: Build Docker image
+              run: |-
+                  docker build \
+                  -f docker/bouncer-prod/Dockerfile \
+                  -t $IMAGE_NAME .
+
+            # - name: Test Docker image
+            #   run: docker run $IMAGE_NAME sh -c "yarn bouncer test"
+
+            - name: Push Docker image
+              run: docker push $IMAGE_NAME
+
+            - name: Prepare Firebase Service Account for Production
+              run: |
+                  echo ${{ secrets.FIREBASE_SERVICE_ACCOUNT }} | base64 -d -o "./services/bouncer/src/configs/firebase-service-account.json"
+
+            - name: Deploy Docker image
+              run: |-
+                  gcloud run deploy ${{ vars.GCP_SERVICE_NAME }} \
+                    --image $IMAGE_NAME \
+                    --region $REGION \
+                    --platform managed \
+                    --set-env-vars ENVIRONMENT=production \
+                    --set-env-vars GOOGLE_APPLICATION_CREDENTIALS=${{ secrets.FIREBASE_SERVICE_ACCOUNT }} \
+                    --allow-unauthenticated
